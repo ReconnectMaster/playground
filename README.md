@@ -1,5 +1,3 @@
-# My Digital Tools Portal
-
-The landing page is purely designed with HTML, CSS, and JavaScript.
+# Digital Product Directory
 
 Direct link: https://reconnectmaster.github.io/portal
