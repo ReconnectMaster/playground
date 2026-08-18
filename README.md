@@ -1,3 +1,3 @@
-# Digital Product Directory
+# Ai & Digital Product Directory
 
-Direct link: https://reconnectmaster.github.io/portal
+Direct link: https://reconnectmaster.com
