@@ -1,7 +1,7 @@
-// 1. Plug in each individual light bulb (JSON post)
-import post1 from './posts/gmail-delete-rename.json';
-
-// 2. Control which lights are turned ON across the whole site
-export const blogPosts = [
-  post1
+// Central hub listing the post JSON files (root-relative paths).
+// Edit this array to add/remove posts from the site.
+export const postFiles = [
+  './src/data/posts/gmail-delete-rename.json'
+  // Add more post JSON paths here, e.g.:
+  // './src/data/posts/future-of-audio.json'
 ];
