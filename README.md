@@ -1,14 +1,15 @@
 # Ai & Digital Product Directory
 
 Direct link: https://reconnectmaster.com
+
 Github Site address -> https://reconnectmaster.github.io/portal/
 
 Tech component: Promptpay QR -> https://promptpay2.me/
 
+---
+### References:
 
-References:
-
-**Structure
+**Structure**
 "One Main Portfolio Repo with Subfolders"
 
 ```text
