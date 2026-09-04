@@ -1,1 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tense Tune-Up · Stage 2</title>
+<style>
+  :root { --ok:#16a34a; --bad:#dc2626; --line:#d4d4d8; --ink:#18181b; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    max-width: 700px; margin: 0 auto; padding: 28px 20px 90px;
+    color: var(--ink); background: #fafaf9; line-height: 2.1;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; line-height: 1.3; }
+  .sub, .sys { font-family: system-ui, sans-serif; line-height: 1.5; }
+  .sub { font-size: .85rem; color: #71717a; margin-bottom: 20px; }
 
+  #hud {
+    display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+    font-family: system-ui, sans-serif; font-size: .8rem; color: #52525b;
+    background: #fff; border: 1px solid #e7e5e4; border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 22px; line-height: 1.4;
+  }
+  #hud b { color: var(--ink); font-size: 1rem; }
+
+  .item { padding: 14px 0; border-bottom: 1px solid #e7e5e4; font-size: 1.05rem; }
+  .tag {
+    display: inline-block; font-family: system-ui, sans-serif; font-size: .68rem;
+    letter-spacing: .06em; text-transform: uppercase; color: #a1a1aa;
+    line-height: 1; margin-bottom: 6px;
+  }
+  .tag .hot { color: var(--bad); }
+  input.blank {
+    font-family: inherit; font-size: 1rem; text-align: center;
+    border: none; border-bottom: 2px solid var(--line); background: transparent;
+    width: 155px; padding: 2px 4px; margin: 0 3px; color: var(--ink);
+  }
+  input.blank:focus { outline: none; border-bottom-color: #6366f1; }
+  input.ok  { border-bottom-color: var(--ok);  color: var(--ok); }
+  input.bad { border-bottom-color: var(--bad); color: var(--bad); }
+
+  .why {
+    font-family: system-ui, sans-serif; font-size: .82rem; line-height: 1.55;
+    color: #52525b; background: #f4f4f5; border-left: 3px solid #a1a1aa;
+    padding: 8px 12px; margin-top: 8px; display: none;
+  }
+  .why.show { display: block; }
+  .why b { color: var(--ok); }
+
+  #weak {
+    margin-top: 30px; font-family: system-ui, sans-serif; font-size: .82rem;
+    color: #52525b; line-height: 1.6;
+  }
+  #weak h3 { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: #a1a1aa; margin: 0 0 8px; }
+  .wrow { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+  .wname { flex: 0 0 210px; }
+  .wbar { flex: 1; height: 7px; background: #e7e5e4; border-radius: 4px; overflow: hidden; }
+  .wfill { height: 100%; background: var(--bad); }
+  .wpct { flex: 0 0 62px; text-align: right; color: #a1a1aa; }
+
+  #bar {
+    position: fixed; bottom: 0; left: 0; right: 0; background: #fff;
+    border-top: 1px solid #e7e5e4; padding: 12px; text-align: center;
+    font-family: system-ui, sans-serif;
+  }
+  button {
+    font: inherit; font-size: .88rem; padding: 9px 16px; margin: 0 3px;
+    border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer;
+  }
+  button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  button:hover { opacity: .85; }
+  #score { font-size: .9rem; margin-left: 8px; color: #52525b; }
+  
+    .opts { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;
+          font-family: system-ui, sans-serif; line-height: 1.4; }
+  button.opt { font-size: .78rem; padding: 6px 11px; border: 1px solid var(--line);
+               border-radius: 14px; background: #fff; color: #52525b; cursor: pointer; }
+  button.opt.sel { border-color: #6366f1; background: #eef2ff; color: var(--ink); }
+  button.opt.ok  { border-color: var(--ok);  background: #f0fdf4; color: var(--ok); }
+  button.opt.bad { border-color: var(--bad); background: #fef2f2; color: var(--bad); }
+  b.fill { color: var(--ok); font-weight: 700; }
+    <button id="modeBtn" onclick="toggleMode()">Reverse mode</button>
+</style>
+</head>
+<body>
+
+<h1>Tense Tune-Up</h1>
+<p class="sub">Fill each blank. <kbd>Enter</kbd> jumps to the next one. Questions you miss come back more often.</p>
+
+<div id="hud">
+  <span>Streak <b id="hStreak">0</b></span>
+  <span>Best <b id="hBest">0</b></span>
+  <span>Answered <b id="hSeen">0</b></span>
+  <span>Accuracy <b id="hAcc">–</b></span>
+</div>
+
+<main id="quiz"></main>
+
+<section id="weak"></section>
+
+<div id="bar">
+  <button class="primary" onclick="check()">Check</button>
+  <button onclick="reveal()">Show answers</button>
+  <button onclick="newRound()">New set</button>
+  <button onclick="resetAll()">Reset progress</button>
+  <span id="score"></span>
+</div>
+
+<script>
+/* =================================================================
+   1. THE SENTENCE BANK
+   id     – stable key for progress tracking (never reuse one)
+   cat    – category shown as the label, also used for weak-spot stats
+   text   – ___ marks each blank
+   blanks – one object per ___ , in order
+================================================================= */
+const BANK = [
+
+/* ---- Subject–verb agreement ---- */
+{ id:"ag1", cat:"Subject–Verb Agreement", text:"He ___ (have) three houses, while all five of them ___ (stay) in one room.",
+  blanks:[
+    { answers:["has"], why:"<i>He</i> is singular → <i>has</i>. How much he owns is irrelevant." },
+    { answers:["stay"], why:"<i>All five of them</i> is plural → <i>stay</i>. Match the subject, not the meaning." }
+  ]},
+{ id:"ag2", cat:"Subject–Verb Agreement", text:"The list of items ___ (be) on the desk.",
+  blanks:[{ answers:["is"], why:"The subject is <i>list</i>, not <i>items</i>. Mentally delete the <i>of…</i> phrase." }]},
+{ id:"ag3", cat:"Subject–Verb Agreement", text:"Each of the students ___ (have) a locker.",
+  blanks:[{ answers:["has"], why:"<i>Each / every / one of</i> are always singular, whatever follows." }]},
+{ id:"ag4", cat:"Subject–Verb Agreement", text:"Ten years ___ (be) a long time to wait.",
+  blanks:[{ answers:["is"], why:"A measured amount counts as one single unit → singular." }]},
+{ id:"ag5", cat:"Subject–Verb Agreement", text:"The team ___ (be) arguing among themselves again.",
+  blanks:[{ answers:["are","is"], why:"BrE treats <i>team</i> as plural when members act individually; AmE keeps <i>is</i>. Both accepted." }]},
+
+/* ---- There is / There are ---- */
+{ id:"th1", cat:"There is / There are", text:"There ___ (be) three houses over there, but there ___ (be) only one car.",
+  blanks:[
+    { answers:["are"], why:"<i>Three houses</i> is plural → <i>are</i>." },
+    { answers:["is"], why:"<i>One car</i> is singular → <i>is</i>. The verb follows what comes <i>after</i> it." }
+  ]},
+{ id:"th2", cat:"There is / There are", text:"There ___ (be) a lot of noise coming from upstairs.",
+  blanks:[{ answers:["is"], why:"<i>Noise</i> is uncountable → singular, even after <i>a lot of</i>." }]},
+{ id:"th3", cat:"There is / There are", text:"There ___ (be) too many people in this lift.",
+  blanks:[{ answers:["are"], why:"<i>People</i> is already plural — never <i>peoples</i> here." }]},
+{ id:"th4", cat:"There is / There are", text:"There ___ (be) some milk and two eggs in the fridge.",
+  blanks:[{ answers:["is","are"], why:"Proximity rule: the verb usually matches the nearest item (<i>milk</i>) → <i>is</i>. <i>Are</i> is tolerated." }]},
+
+/* ---- Either / Neither ---- */
+{ id:"ei1", cat:"Either / Neither", text:"Neither of the answers ___ (be) correct.",
+  blanks:[{ answers:["is","are"], why:"<i>Neither of</i> takes a singular verb in careful English → <i>is</i>." }]},
+{ id:"ei2", cat:"Either / Neither", text:"She doesn't drive, and ___ do I.",
+  blanks:[{ answers:["neither","nor"], why:"Agreeing with a negative uses <i>neither/nor</i> + inversion. <i>Either</i> only works at the end: <i>I don't either.</i>" }]},
+{ id:"ei3", cat:"Either / Neither", text:"Neither the manager nor the assistants ___ (know) the code.",
+  blanks:[{ answers:["know"], why:"Proximity rule — the verb matches the <i>nearer</i> subject, <i>assistants</i>." }]},
+{ id:"ei4", cat:"Either / Neither", text:"You can have ___ the soup or the salad — not both.",
+  blanks:[{ answers:["either"], why:"<i>Either… or</i> = one of two. <i>Neither… nor</i> = zero of two." }]},
+{ id:"ei5", cat:"Either / Neither", text:"I've read ___ of the two reports — I've been too busy.",
+  blanks:[{ answers:["neither"], why:"Two items, none done → <i>neither</i>. It's already negative, so no <i>not</i>." }]},
+
+/* ---- Some / Any / Many / Much ---- */
+{ id:"sa1", cat:"Some / Any / Many / Much", text:"I don't have ___ money left.",
+  blanks:[{ answers:["any","much"], why:"Negatives take <i>any</i> (or <i>much</i> for uncountables) — not <i>some</i>." }]},
+{ id:"sa2", cat:"Some / Any / Many / Much", text:"Would you like ___ more coffee?",
+  blanks:[{ answers:["some"], why:"Offers and requests keep <i>some</i>, even though they're questions." }]},
+{ id:"sa3", cat:"Some / Any / Many / Much", text:"How ___ luggage are you taking?",
+  blanks:[{ answers:["much"], why:"<i>Luggage</i> is uncountable → <i>much</i>. (Countable: <i>how many bags</i>.)" }]},
+{ id:"sa4", cat:"Some / Any / Many / Much", text:"Too ___ people applied for too ___ jobs.",
+  blanks:[
+    { answers:["many"], why:"<i>People</i> is countable → <i>many</i>." },
+    { answers:["few"], why:"Countable shortage → <i>few</i>. (Uncountable would be <i>little</i>.)" }
+  ]},
+{ id:"sa5", cat:"Some / Any / Many / Much", text:"If you need ___ help, just ask.",
+  blanks:[{ answers:["any"], why:"<i>If</i>-clauses behave like questions → <i>any</i>." }]},
+{ id:"sa6", cat:"Some / Any / Many / Much", text:"There isn't ___ information on the website, and there aren't ___ photos either.",
+  blanks:[
+    { answers:["much","any"], why:"<i>Information</i> is uncountable → <i>much / any</i>." },
+    { answers:["many","any"], why:"<i>Photos</i> is countable → <i>many / any</i>." }
+  ]},
+
+/* ---- have done / have been done / have been doing ---- */
+{ id:"pf1", cat:"Perfect: done / been done / been doing", text:"I ___ (paint) the kitchen all morning — that's why I'm covered in it.",
+  blanks:[{ answers:["have been painting","'ve been painting"], why:"Focus on the <i>activity and its traces</i>, not a finished result → have been doing." }]},
+{ id:"pf2", cat:"Perfect: done / been done / been doing", text:"I ___ (paint) the kitchen — come and look at it.",
+  blanks:[{ answers:["have painted","'ve painted"], why:"Focus on the <i>completed result</i> you can point at → have done." }]},
+{ id:"pf3", cat:"Perfect: done / been done / been doing", text:"The kitchen ___ (paint) — don't touch the walls.",
+  blanks:[{ answers:["has been painted"], why:"The kitchen didn't act; it <i>received</i> the action → have been done (passive)." }]},
+{ id:"pf4", cat:"Perfect: done / been done / been doing", text:"The reports ___ (already / send) to head office.",
+  blanks:[{ answers:["have already been sent"], why:"Passive perfect: <i>have + been + past participle</i>. <i>Already</i> slots after <i>have</i>." }]},
+{ id:"pf5", cat:"Perfect: done / been done / been doing", text:"She ___ (write) three novels so far.",
+  blanks:[{ answers:["has written"], why:"A countable finished total → simple perfect. <i>Has been writing</i> would deny they're finished." }]},
+{ id:"pf6", cat:"Perfect: done / been done / been doing", text:"How long ___ you ___ (wait) out here?",
+  blanks:[
+    { answers:["have"], why:"<i>How long</i> + still happening → present perfect." },
+    { answers:["been waiting"], why:"Duration of an unbroken activity → been doing." }
+  ]},
+{ id:"pf7", cat:"Perfect: done / been done / been doing", text:"He ___ (not / finish) the report yet, but he ___ (work) on it since dawn.",
+  blanks:[
+    { answers:["hasn't finished","has not finished"], why:"<i>Yet</i> + incomplete result → simple perfect negative." },
+    { answers:["has been working","'s been working"], why:"<i>Since</i> + ongoing effort → been doing." }
+  ]},
+{ id:"pf8", cat:"Perfect: done / been done / been doing", text:"The road ___ (repair) three times this year, and it's still terrible.",
+  blanks:[{ answers:["has been repaired"], why:"The road receives the action, and we're counting completed events → passive perfect." }]},
+/* ---- Embedded (indirect) questions ---- */
+{ id:"eq1", cat:"Embedded Questions", text:"Do you know who ___ (she / be)?",
+  blanks:[{ answers:["she is"], why:"Inside the sentence it's no longer a question — keep <b>statement order</b>: subject before verb. <i>who is she</i> only works standing alone." }]},
+
+{ id:"eq2", cat:"Embedded Questions", text:"Where ___ (she / go) last night? Nobody knows where ___ (she / go).",
+  blanks:[
+    { answers:["did she go"], why:"Standalone question → inversion + <i>did</i>." },
+    { answers:["she went"], why:"Same idea, now embedded → auxiliary disappears and the tense moves onto the main verb." }
+  ]},
+
+{ id:"eq3", cat:"Embedded Questions", text:"I don't know how long they have been there ___ (. / ?)",
+  blanks:[{ answers:["."], why:"The main clause is <i>I don't know</i> — a statement. A question word inside doesn't make the sentence a question." }]},
+
+{ id:"eq4", cat:"Embedded Questions", text:"Could you tell me how long they have been there ___ (. / ?)",
+  blanks:[{ answers:["?"], why:"Here the main clause <i>Could you tell me</i> IS a question → question mark. Compare with the previous one." }]},
+
+{ id:"eq5", cat:"Embedded Questions", text:"I wonder what time the meeting ___ (start).",
+  blanks:[{ answers:["starts"], why:"No <i>do/does</i> support in embedded clauses — never <i>what time does the meeting start</i> after <i>I wonder</i>." }]},
+
+{ id:"eq6", cat:"Embedded Questions", text:"Can you tell me why ___ (he / leave) so early yesterday?",
+  blanks:[{ answers:["he left"], why:"<i>Did</i> vanishes and its past tense lands on <i>leave</i> → <i>he left</i>." }]},
+
+{ id:"eq7", cat:"Embedded Questions", text:"Do you know ___ (if / that) the shop is open on Sundays?",
+  blanks:[{ answers:["if","whether"], why:"Yes/no questions need <i>if</i> or <i>whether</i> to embed — there's no question word to reuse." }]},
+
+{ id:"eq8", cat:"Embedded Questions", text:"She asked me where I ___ (be) from.",
+  blanks:[{ answers:["was"], why:"Reported question = statement order + backshift. Not <i>where was I from</i>." }]},
+
+/* ---- Connectors & linking words ---- */
+{ id:"cn1", cat:"Connectors & Linkers", text:"___ (Despite / Although) the heavy rain, the match continued.",
+  blanks:[{ answers:["despite","in spite of"], why:"<i>Despite</i> + noun phrase. It can never be followed by a subject + verb." }]},
+
+{ id:"cn2", cat:"Connectors & Linkers", text:"___ (Despite / Although) it was raining heavily, the match continued.",
+  blanks:[{ answers:["although","though","even though"], why:"A full clause (<i>it was raining</i>) needs <i>although</i>. Same meaning as above — different grammar." }]},
+
+{ id:"cn3", cat:"Connectors & Linkers", text:"The flight was cancelled ___ (due to / because) the bad weather.",
+  blanks:[{ answers:["due to","because of","owing to"], why:"Followed by a noun → <i>due to / because of</i>. <i>Because</i> alone can't take a bare noun." }]},
+
+{ id:"cn4", cat:"Connectors & Linkers", text:"We stayed at home ___ (because / due to) the roads were flooded.",
+  blanks:[{ answers:["because","as","since"], why:"A clause follows → plain <i>because</i>. The noun/clause split is the whole rule." }]},
+
+{ id:"cn5", cat:"Connectors & Linkers", text:"She took the train ___ (instead of / instead) driving.",
+  blanks:[{ answers:["instead of"], why:"<i>Instead of</i> + noun or <i>-ing</i>. Two words, joined to what follows." }]},
+
+{ id:"cn6", cat:"Connectors & Linkers", text:"He didn't apologise. ___ (Instead / Instead of), he blamed everyone else.",
+  blanks:[{ answers:["instead"], why:"Alone at the start of a sentence, <i>instead</i> stands by itself with a comma." }]},
+
+{ id:"cn7", cat:"Connectors & Linkers", text:"I left early ___ (in order to / for) avoid the traffic.",
+  blanks:[{ answers:["in order to","to","so as to"], why:"Purpose + base verb. Never <i>for avoid</i> or <i>for to avoid</i>." }]},
+
+{ id:"cn8", cat:"Connectors & Linkers", text:"I left the car at home ___ (so that / in order to) my sister could use it.",
+  blanks:[{ answers:["so that"], why:"The purpose has a <b>different subject</b> (<i>my sister</i>) → <i>so that</i> + clause. <i>In order to</i> needs the same subject." }]},
+
+{ id:"cn9", cat:"Connectors & Linkers", text:"___ (Since / During) she moved to Rome, I ___ (not / see) her once.",
+  blanks:[
+    { answers:["since"], why:"<i>Since</i> = from that point in time onwards." },
+    { answers:["haven't seen","have not seen"], why:"Time-<i>since</i> pulls the present perfect — a rule the sentence can't escape." }
+  ]},
+
+{ id:"cn10", cat:"Connectors & Linkers", text:"___ (During / While) the meeting, nobody said a word.",
+  blanks:[{ answers:["during"], why:"<i>During</i> + noun. <i>While</i> would need <i>while the meeting was going on</i>." }]},
+
+{ id:"cn11", cat:"Connectors & Linkers", text:"___ (While / During) I was walking home, I ___ (meet) an old friend.",
+  blanks:[
+    { answers:["while","when","as"], why:"A clause follows → <i>while</i>. Same meaning as <i>during</i>, different structure." },
+    { answers:["met"], why:"Short interrupting event → simple past against the continuous background." }
+  ]},
+
+{ id:"cn12", cat:"Connectors & Linkers", text:"They trained hard all season; ___ (however / therefore), they finished last.",
+  blanks:[{ answers:["however"], why:"Contrast, not consequence. <i>Therefore</i> would claim the loss was caused by training." }]},
+/* ---- Core tenses (from stage 1) ---- */
+{ id:"t1", cat:"Present Perfect", text:"I ___ (live) here for ten years.",
+  blanks:[{ answers:["have lived","'ve lived","have been living","'ve been living"], why:"Started in the past, still true now — not <i>live</i>, not <i>lived</i>." }]},
+{ id:"t2", cat:"Future Perfect", text:"By 2030 she ___ (finish) her degree.",
+  blanks:[{ answers:["will have finished","'ll have finished"], why:"Done <i>before</i> a future point. <i>By + future date</i> is the trigger." }]},
+{ id:"t3", cat:"Reported Speech", text:"He said he ___ (be) tired.",
+  blanks:[{ answers:["was"], why:"Backshift: <i>said</i> pulls the sentence one step into the past." }]},
+{ id:"t4", cat:"Past Continuous vs Simple Past", text:"While she ___ (cook) dinner, the power suddenly ___ (go) out.",
+  blanks:[
+    { answers:["was cooking"], why:"The long background action." },
+    { answers:["went"], why:"The short event that interrupts it." }
+  ]},
+{ id:"t5", cat:"Past Perfect", text:"When I arrived, the film ___ (already / start).",
+  blanks:[{ answers:["had already started"], why:"Two past events — the earlier steps back into <i>had + participle</i>." }]},
+{ id:"t6", cat:"Second Conditional", text:"If I ___ (know) her number, I would call her.",
+  blanks:[{ answers:["knew"], why:"Unreal present: past form, present meaning." }]},
+{ id:"t7", cat:"Wish / Regret", text:"I wish I ___ (say) something at the time.",
+  blanks:[{ answers:["had said"], why:"Regret about the past → <i>had + participle</i>." }]},
+{ id:"t8", cat:"Passive (past)", text:"The bridge ___ (build) in 1890.",
+  blanks:[{ answers:["was built"], why:"The bridge receives the action → <i>was + past participle</i>." }]}
+];
+
+const PER_ROUND = 6;
+
+/* =================================================================
+   2. MEMORY  (survives closing the browser)
+================================================================= */
+const STORE = "ttu.progress.v1";
+let mem = loadMem();
+
+function loadMem() {
+  try {
+    const m = JSON.parse(localStorage.getItem(STORE));
+    if (m && m.items) return m;
+  } catch (e) {}
+  return { items: {}, streak: 0, best: 0, seen: 0, right: 0 };
+}
+function saveMem() { localStorage.setItem(STORE, JSON.stringify(mem)); }
+function recordOf(id) { return mem.items[id] || { seen: 0, wrong: 0 }; }
+
+/* =================================================================
+   3. WEIGHTED DRAW  — misses resurface, unseen items get priority
+================================================================= */
+let lastRound = [];
+
+function weightOf(item) {
+  const r = recordOf(item.id);
+  let w;
+  if (r.seen === 0) w = 4;                      // never attempted → show it soon
+  else w = 1 + (r.wrong / r.seen) * 8;          // 1 (always right) … 9 (always wrong)
+  if (lastRound.includes(item.id)) w *= 0.15;   // don't repeat back-to-back
+  return w;
+}
+
+function drawRound(n) {
+  const pool = [...BANK];
+  const picked = [];
+  while (picked.length < n && pool.length) {
+    const weights = pool.map(weightOf);
+    const total = weights.reduce((a, b) => a + b, 0);
+    let r = Math.random() * total, idx = 0;
+    while (r > weights[idx] && idx < weights.length - 1) { r -= weights[idx]; idx++; }
+    picked.push(pool.splice(idx, 1)[0]);
+  }
+  return picked;
+}
+
+/* =================================================================
+   4. RENDER
+================================================================= */
+let round = [];
+
+function normalize(s) {
+  return s.toLowerCase().trim().replace(/\s+/g, " ").replace(/[’‘]/g, "'");
+}
+
+function newRound() {
+  round = drawRound(PER_ROUND);
+  lastRound = round.map(i => i.id);
+
+  const quiz = document.getElementById("quiz");
+  quiz.innerHTML = "";
+
+  round.forEach((item, i) => {
+    const r = recordOf(item.id);
+    const hot = r.wrong > 0 ? ` <span class="hot">· missed ${r.wrong}×</span>` : "";
+    const parts = item.text.split("___");
+    let html = `<span class="tag">${item.cat}${hot}</span><div>`;
+
+    parts.forEach((part, j) => {
+      html += part;
+      if (j < item.blanks.length) {
+        html += `<input class="blank" data-i="${i}" data-j="${j}" autocomplete="off" spellcheck="false">`;
+      }
+    });
+
+    html += `</div><div class="why" id="why-${i}"></div>`;
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = html;
+    quiz.appendChild(div);
+  });
+
+  document.getElementById("score").textContent = "";
+  wireKeys();
+  renderHud();
+  renderWeak();
+}
+
+/* =================================================================
+   5. CHECK  — grade, remember, explain
+================================================================= */
+function check() {
+  const inputs = [...document.querySelectorAll("input.blank")];
+  let correct = 0;
+  const itemWrong = {};
+
+  document.querySelectorAll(".why").forEach(w => { w.classList.remove("show"); w.innerHTML = ""; });
+
+  inputs.forEach(input => {
+    const item  = round[input.dataset.i];
+    const blank = item.blanks[input.dataset.j];
+    const good  = blank.answers.some(a => normalize(a) === normalize(input.value));
+
+    input.classList.remove("ok", "bad");
+    input.classList.add(good ? "ok" : "bad");
+
+    if (good) {
+      correct++;
+      mem.streak++;
+      if (mem.streak > mem.best) mem.best = mem.streak;
+    } else {
+      mem.streak = 0;
+      itemWrong[item.id] = true;
+      const box = document.getElementById("why-" + input.dataset.i);
+      box.innerHTML += `<div><b>${blank.answers[0]}</b> — ${blank.why}</div>`;
+      box.classList.add("show");
+    }
+  });
+
+  round.forEach(item => {
+    const r = recordOf(item.id);
+    mem.items[item.id] = { seen: r.seen + 1, wrong: r.wrong + (itemWrong[item.id] ? 1 : 0) };
+  });
+
+  mem.seen  += inputs.length;
+  mem.right += correct;
+  saveMem();
+
+  document.getElementById("score").textContent = `${correct} / ${inputs.length}`;
+  renderHud();
+  renderWeak();
+}
+
+function reveal() {
+  document.querySelectorAll("input.blank").forEach(input => {
+    const blank = round[input.dataset.i].blanks[input.dataset.j];
+    input.value = blank.answers[0];
+    input.classList.remove("bad");
+    input.classList.add("ok");
+  });
+}
+
+/* =================================================================
+   6. HUD + WEAK-SPOT CHART
+================================================================= */
+function renderHud() {
+  document.getElementById("hStreak").textContent = mem.streak;
+  document.getElementById("hBest").textContent   = mem.best;
+  document.getElementById("hSeen").textContent   = mem.seen;
+  document.getElementById("hAcc").textContent    =
+    mem.seen ? Math.round(mem.right / mem.seen * 100) + "%" : "–";
+}
+
+function renderWeak() {
+  const byCat = {};
+  BANK.forEach(item => {
+    const r = recordOf(item.id);
+    if (!r.seen) return;
+    const c = byCat[item.cat] || (byCat[item.cat] = { seen: 0, wrong: 0 });
+    c.seen  += r.seen;
+    c.wrong += r.wrong;
+  });
+
+  const rows = Object.entries(byCat)
+    .map(([cat, c]) => ({ cat, pct: Math.round(c.wrong / c.seen * 100), n: c.seen }))
+    .filter(r => r.pct > 0)
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 5);
+
+  const el = document.getElementById("weak");
+  if (!rows.length) { el.innerHTML = ""; return; }
+
+  el.innerHTML = "<h3>Your weak spots</h3>" + rows.map(r => `
+    <div class="wrow">
+      <span class="wname">${r.cat}</span>
+      <span class="wbar"><span class="wfill" style="width:${r.pct}%"></span></span>
+      <span class="wpct">${r.pct}% · ${r.n}</span>
+    </div>`).join("");
+}
+
+function resetAll() {
+  if (!confirm("Erase all progress?")) return;
+  mem = { items: {}, streak: 0, best: 0, seen: 0, right: 0 };
+  saveMem();
+  lastRound = [];
+  newRound();
+}
+
+/* =================================================================
+   7. ENTER = NEXT BLANK
+================================================================= */
+function wireKeys() {
+  const inputs = [...document.querySelectorAll("input.blank")];
+  inputs.forEach((input, idx) => {
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (idx < inputs.length - 1) inputs[idx + 1].focus();
+        else check();
+      }
+    });
+    input.addEventListener("input", () => input.classList.remove("ok", "bad"));
+  });
+}
+/* =================================================================
+   8. REVERSE MODE  — see the answer, name the rule
+   Wraps the existing functions; nothing above is modified.
+================================================================= */
+let mode = "fill";
+let picks = {};
+const ALL_CATS = [...new Set(BANK.map(i => i.cat))];
+
+function toggleMode() {
+  mode = (mode === "fill") ? "reverse" : "fill";
+  document.getElementById("modeBtn").textContent =
+    (mode === "fill") ? "Reverse mode" : "Fill-in mode";
+  newRound();
+}
+
+/* rebuild the sentence with answers in place, hints stripped */
+function filledHTML(item) {
+  const parts = item.text.split("___");
+  let out = parts[0];
+  item.blanks.forEach((b, j) => {
+    const ans = b.answers[0];
+    if (/^[.?!]$/.test(ans)) out = out.replace(/\s+$/, "");
+    out += `<b class="fill">${ans}</b>`;
+    out += parts[j + 1].replace(/^\s*\([^)]*\)/, "");
+  });
+  return out;
+}
+
+function choicesFor(item) {
+  const others = ALL_CATS.filter(c => c !== item.cat);
+  const picked = [item.cat];
+  while (picked.length < 4 && others.length) {
+    picked.push(others.splice(Math.floor(Math.random() * others.length), 1)[0]);
+  }
+  for (let i = picked.length - 1; i > 0; i--) {          // Fisher–Yates
+    const j = Math.floor(Math.random() * (i + 1));
+    [picked[i], picked[j]] = [picked[j], picked[i]];
+  }
+  return picked;
+}
+
+function renderReverse() {
+  round = drawRound(PER_ROUND);
+  lastRound = round.map(i => i.id);
+  picks = {};
+
+  const quiz = document.getElementById("quiz");
+  quiz.innerHTML = "";
+
+  round.forEach((item, i) => {
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML =
+      `<span class="tag">Which rule is this?</span>
+       <div>${filledHTML(item)}</div>
+       <div class="opts">${choicesFor(item).map(c =>
+         `<button class="opt" data-i="${i}" data-cat="${c}">${c}</button>`).join("")}</div>
+       <div class="why" id="why-${i}"></div>`;
+    quiz.appendChild(div);
+  });
+
+  quiz.querySelectorAll(".opt").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const i = btn.dataset.i;
+      quiz.querySelectorAll(`.opt[data-i="${i}"]`)
+          .forEach(x => x.classList.remove("sel", "ok", "bad"));
+      btn.classList.add("sel");
+      picks[i] = btn.dataset.cat;
+    });
+  });
+
+  document.getElementById("score").textContent = "";
+  renderHud();
+  renderWeak();
+}
+
+function checkReverse() {
+  let correct = 0;
+  document.querySelectorAll(".why").forEach(w => { w.classList.remove("show"); w.innerHTML = ""; });
+
+  round.forEach((item, i) => {
+    const chosen = picks[i];
+    const good = chosen === item.cat;
+
+    document.querySelectorAll(`.opt[data-i="${i}"]`).forEach(btn => {
+      btn.classList.remove("sel", "ok", "bad");
+      if (btn.dataset.cat === item.cat) btn.classList.add("ok");
+      else if (btn.dataset.cat === chosen) btn.classList.add("bad");
+    });
+
+    if (good) {
+      correct++;
+      mem.streak++;
+      if (mem.streak > mem.best) mem.best = mem.streak;
+    } else {
+      mem.streak = 0;
+      const box = document.getElementById("why-" + i);
+      box.innerHTML = item.blanks.map(b => `<div><b>${b.answers[0]}</b> — ${b.why}</div>`).join("");
+      box.classList.add("show");
+    }
+
+    const r = recordOf(item.id);
+    mem.items[item.id] = { seen: r.seen + 1, wrong: r.wrong + (good ? 0 : 1) };
+  });
+
+  mem.seen  += round.length;
+  mem.right += correct;
+  saveMem();
+
+  document.getElementById("score").textContent = `${correct} / ${round.length}`;
+  renderHud();
+  renderWeak();
+}
+
+function revealReverse() {
+  round.forEach((item, i) => {
+    document.querySelectorAll(`.opt[data-i="${i}"]`).forEach(btn => {
+      btn.classList.remove("sel", "bad");
+      if (btn.dataset.cat === item.cat) btn.classList.add("ok");
+    });
+  });
+}
+
+/* ---- wrap the originals: same names, mode-aware ---- */
+const fillRound  = window.newRound  || newRound;
+const fillCheck  = window.check     || check;
+const fillReveal = window.reveal    || reveal;
+
+window.newRound = () => (mode === "fill") ? fillRound()  : renderReverse();
+window.check    = () => (mode === "fill") ? fillCheck()  : checkReverse();
+window.reveal   = () => (mode === "fill") ? fillReveal() : revealReverse();
+
+newRound();
+</script>
+</body>
+</html>
